@@ -36,7 +36,7 @@ pub fn get_pid(net_tuple: NetWorkTuple) -> Result<u32, ProcessError> {
         return Err(ProcessError::NotFound); // 未找到匹配的套接字
     }
     let pid = get_pid_by_inode(socket.0, socket.1)?.ok_or(ProcessError::NotFound)?;
-    Ok((pid))
+    Ok(pid)
 }
 
 fn get_inode_by_netlink(net_tuple: NetWorkTuple) -> Result<(u32, u32), ProcessError> {

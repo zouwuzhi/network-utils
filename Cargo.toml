@@ -16,7 +16,6 @@ path = "examples/process_test.rs"
 [dependencies]
 thiserror = "2.0.12"
 
-
 [target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
 libproc = { version = "0.14" } # macOS and Linux
 libc = "0.2.141"
@@ -37,6 +36,7 @@ windows-sys = { version = "0.60", features = [
     "Win32_NetworkManagement_IpHelper",
     "Win32_Networking_WinSock",
     "Win32_System_ProcessStatus",
+    "Win32_System_Diagnostics_ToolHelp",
 ] }
 
 

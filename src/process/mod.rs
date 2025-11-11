@@ -2,7 +2,6 @@ use std::{
     io,
     net::{IpAddr, Ipv4Addr},
 };
-
 use thiserror::Error;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -14,11 +13,11 @@ mod windows;
 
 // 重新导出 find_process_name
 #[cfg(any(target_os = "linux", target_os = "android"))]
-pub use linux::find_process_name;
+pub use linux::{find_process_name, find_process_ppid, get_pid, get_ppid};
 #[cfg(target_os = "macos")]
-pub use macos::find_process_name;
+pub use macos::{find_process_name, find_process_ppid, get_pid, get_ppid};
 #[cfg(target_os = "windows")]
-pub use windows::find_process_name;
+pub use windows::{find_process_name, find_process_ppid, get_pid, get_ppid};
 
 #[derive(Debug, Clone, Copy)]
 #[allow(dead_code)]

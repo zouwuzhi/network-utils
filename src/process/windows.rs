@@ -1,27 +1,39 @@
 use crate::process::{NetWorkTuple, Network, ProcessError};
 use std::ffi::c_void;
+use std::mem;
 use std::net::IpAddr;
-use windows_sys::Win32::Foundation::{CloseHandle, ERROR_INSUFFICIENT_BUFFER};
+use windows_sys::Win32::Foundation::{
+    CloseHandle, ERROR_INSUFFICIENT_BUFFER, INVALID_HANDLE_VALUE,
+};
 use windows_sys::Win32::NetworkManagement::IpHelper::{
     GetExtendedTcpTable, GetExtendedUdpTable, MIB_TCP6ROW_OWNER_PID, MIB_TCP6TABLE_OWNER_PID,
     MIB_TCPTABLE_OWNER_PID, MIB_UDP6ROW_OWNER_PID, MIB_UDP6TABLE_OWNER_PID, MIB_UDPTABLE_OWNER_PID,
     TCP_TABLE_OWNER_PID_ALL, UDP_TABLE_OWNER_PID,
 };
 use windows_sys::Win32::Networking::WinSock::{AF_INET, AF_INET6};
+use windows_sys::Win32::System::Diagnostics::ToolHelp::{
+    CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW, TH32CS_SNAPPROCESS,
+};
 use windows_sys::Win32::System::ProcessStatus::GetModuleFileNameExW;
 use windows_sys::Win32::System::Threading::{
-    GetCurrentProcessId, OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ,
+    OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ,
 };
 
 /// 根据网络元组获取进程 ID 和名称
 pub fn find_process_name(net_tuple: NetWorkTuple) -> Result<(u32, String), ProcessError> {
-    let pid = get_pid_by_net(net_tuple)?;
+    let pid = get_pid(net_tuple)?;
     let name = get_process_path(pid)?;
     Ok((pid, name))
 }
 
-/// 根据网络元组获取进程 ID
-fn get_pid_by_net(net_tuple: NetWorkTuple) -> Result<u32, ProcessError> {
+pub fn find_process_ppid(net_tuple: NetWorkTuple) -> Result<(u32, u32), ProcessError> {
+    let pid = get_pid(net_tuple)?;
+    let ppid = get_ppid(pid)?;
+    Ok((pid, ppid))
+}
+
+/// 根据网络元组查找进程 ID
+pub fn get_pid(net_tuple: NetWorkTuple) -> Result<u32, ProcessError> {
     match net_tuple.network {
         Network::Tcp => get_pid_by_tcp_net(net_tuple),
         Network::Udp => get_pid_by_udp_net(net_tuple),
@@ -253,11 +265,10 @@ fn search_udp_v6_pid(
 
 /// 获取进程的可执行文件路径
 fn get_process_path(pid: u32) -> Result<String, ProcessError> {
-    let current_pid = unsafe { GetCurrentProcessId() };
-    // if pid == 0 || pid == current_pid {
+    // let current_pid = unsafe { GetCurrentProcessId() };
     if pid == 0 {
         return Err(ProcessError::NameReadError(format!(
-            "Invalid or current process PID: {pid}, Current PID: {current_pid}"
+            "Invalid or current process PID: {pid}"
         )));
     }
 
@@ -290,4 +301,36 @@ fn get_process_path(pid: u32) -> Result<String, ProcessError> {
     String::from_utf16(wide_str).map_err(|e| {
         ProcessError::NameReadError(format!("UTF-16 conversion failed for PID {pid}: {e}"))
     })
+}
+
+/// 根据进程 ID 获取父进程 ID
+pub fn get_ppid(pid: u32) -> Result<u32, ProcessError> {
+    let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) };
+    if snapshot == INVALID_HANDLE_VALUE {
+        return Err(ProcessError::NotFound);
+    }
+
+    let mut entry: PROCESSENTRY32W = unsafe { mem::zeroed() };
+    entry.dwSize = mem::size_of::<PROCESSENTRY32W>() as u32;
+
+    let ret = unsafe { Process32FirstW(snapshot, &mut entry) };
+    if ret == 0 {
+        unsafe { CloseHandle(snapshot) };
+        return Err(ProcessError::NotFound);
+    }
+
+    loop {
+        if entry.th32ProcessID == pid {
+            unsafe { CloseHandle(snapshot) };
+            return Ok(entry.th32ParentProcessID);
+        }
+
+        let ret = unsafe { Process32NextW(snapshot, &mut entry) };
+        if ret == 0 {
+            break;
+        }
+    }
+
+    unsafe { CloseHandle(snapshot) };
+    Err(ProcessError::NotFound)
 }

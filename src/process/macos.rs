@@ -10,6 +10,19 @@ use sysctl::{CtlValue, Sysctl};
 use crate::process::{NetWorkTuple, Network, ProcessError};
 
 pub fn find_process_name(net_tuple: NetWorkTuple) -> Result<(u32, String), ProcessError> {
+    let pid = get_pid(net_tuple)?;
+    let name = get_exec_path_from_pid(pid)?;
+    Ok((pid, name))
+}
+
+pub fn find_process_ppid(net_work_tuple: NetWorkTuple) -> Result<(u32, u32), ProcessError> {
+    let pid = get_pid(net_work_tuple)?;
+    let ppid = get_ppid(pid)?;
+    Ok((pid, ppid))
+}
+
+/// 根据网络元组查找进程 ID
+pub fn get_pid(net_tuple: NetWorkTuple) -> Result<u32, ProcessError> {
     let spath = match net_tuple.network {
         Network::Tcp => "net.inet.tcp.pcblist_n",
         Network::Udp => "net.inet.udp.pcblist_n",
@@ -94,8 +107,7 @@ pub fn find_process_name(net_tuple: NetWorkTuple) -> Result<(u32, String), Proce
                 // xsocket_n.so_last_pid
                 let pid =
                     u32::from_ne_bytes([buf[so + 68], buf[so + 69], buf[so + 70], buf[so + 71]]);
-                let path = get_exec_path_from_pid(pid)?;
-                return Ok((pid, path));
+                return Ok(pid);
             }
 
             // UDP fallback for unspecified IP
@@ -116,10 +128,18 @@ pub fn find_process_name(net_tuple: NetWorkTuple) -> Result<(u32, String), Proce
     }
 
     if matches!(net_tuple.network, Network::Udp) && !fallback_udp_process.is_empty() {
-        return Ok((0, fallback_udp_process));
+        // For UDP, we return PID 0 and the fallback path
+        return Ok(0);
     }
 
     Err(ProcessError::NotFound)
+}
+
+pub fn get_ppid(pid: u32) -> Option<u32> {
+    unsafe {
+        let info = pidinfo::<libproc::libproc::proc_pid::ProcPIDInfo>(pid as i32, 0)?;
+        Some(info.ppi.ppid as u32)
+    }
 }
 
 // Determine structure size based on macOS version
@@ -138,6 +158,7 @@ fn get_struct_size() -> Result<usize, ProcessError> {
     }
 }
 
+/// 根据 PID 获取进程可执行文件的路径
 fn get_exec_path_from_pid(pid: u32) -> Result<String, ProcessError> {
     proc_pid::pidpath(pid as i32).map_err(|e| ProcessError::NameReadError(e))
 }

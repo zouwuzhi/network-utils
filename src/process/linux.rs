@@ -19,14 +19,24 @@ use crate::process::{NetWorkTuple, Network, ProcessError};
 /// 根据本地 IP 和端口获取进程 ID（PID）。
 /// 返回 `Ok(Some(pid))` 如果找到，`Ok(None)` 如果未找到，`Err` 如果出错。
 pub fn find_process_name(net_tuple: NetWorkTuple) -> Result<(u32, String), ProcessError> {
+    let pid = get_pid(net_tuple)?;
+    let name = get_process_name(pid)?;
+    Ok((pid, name))
+}
+
+pub fn find_process_ppid(net_tuple: NetWorkTuple) -> Result<(u32, u32), ProcessError> {
+    let pid = get_pid(net_tuple)?;
+    let ppid = get_ppid(pid)?;
+    Ok((pid, ppid))
+}
+
+pub fn get_pid(net_tuple: NetWorkTuple) -> Result<u32, ProcessError> {
     let socket = get_inode_by_netlink(net_tuple)?;
     if socket.0 == 0 {
         return Err(ProcessError::NotFound); // 未找到匹配的套接字
     }
-
     let pid = get_pid_by_inode(socket.0, socket.1)?.ok_or(ProcessError::NotFound)?;
-    let name = get_exec_path_from_pid(pid)?;
-    Ok((pid, name))
+    Ok((pid))
 }
 
 fn get_inode_by_netlink(net_tuple: NetWorkTuple) -> Result<(u32, u32), ProcessError> {
@@ -182,6 +192,23 @@ fn is_valid_pid(name: &[u8]) -> bool {
 
 /// 根据 PID 获取进程可执行文件的路径。
 /// 返回 `Ok(Some(path))` 如果找到，`Ok(None)` 如果未找到，`Err` 如果出错。
-fn get_exec_path_from_pid(pid: u32) -> Result<String, ProcessError> {
+pub fn get_process_name(pid: u32) -> Result<String, ProcessError> {
     libproc::proc_pid::pidpath(pid as i32).map_err(|e| ProcessError::NameReadError(e))
+}
+
+/// 根据进程 ID 获取父进程 ID
+pub fn get_ppid(pid: u32) -> Result<u32, ProcessError> {
+    let path = format!("/proc/{}/stat", pid);
+    let content = std::fs::read_to_string(&path).map_err(|e| ProcessError::IoError(e))?;
+
+    // stat 文件的格式是空格分隔的字段
+    // 第4个字段(索引为3)是父进程ID
+    let fields: Vec<&str> = content.split_whitespace().collect();
+    if fields.len() < 4 {
+        return Err(ProcessError::NotFound);
+    }
+
+    fields[3]
+        .parse::<u32>()
+        .map_err(|_| ProcessError::InvalidData("Failed to parse PPID".to_string()))
 }

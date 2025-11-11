@@ -254,7 +254,8 @@ fn search_udp_v6_pid(
 /// 获取进程的可执行文件路径
 fn get_process_path(pid: u32) -> Result<String, ProcessError> {
     let current_pid = unsafe { GetCurrentProcessId() };
-    if pid == 0 || pid == current_pid {
+    // if pid == 0 || pid == current_pid {
+    if pid == 0 {
         return Err(ProcessError::NameReadError(format!(
             "Invalid or current process PID: {pid}, Current PID: {current_pid}"
         )));

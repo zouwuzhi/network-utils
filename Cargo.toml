@@ -1,6 +1,6 @@
 [package]
 name = "network-utils"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 description = "A library for identifying processes associated with network connections on Windows, macOS, and Linux"
 license = "MIT OR Apache-2.0"

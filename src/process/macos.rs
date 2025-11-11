@@ -135,11 +135,11 @@ pub fn get_pid(net_tuple: NetWorkTuple) -> Result<u32, ProcessError> {
     Err(ProcessError::NotFound)
 }
 
-pub fn get_ppid(pid: u32) -> Option<u32> {
-    unsafe {
-        let info = pidinfo::<libproc::libproc::proc_pid::ProcPIDInfo>(pid as i32, 0)?;
-        Some(info.ppi.ppid as u32)
+pub fn get_ppid(pid: u32) -> Result<u32, ProcessError> {
+    if let Ok(info) = pidinfo::<BSDInfo>(pid as i32, 0) {
+        return Ok(info.pbi_ppid as u32);
     }
+    Err(ProcessError::NotFound)
 }
 
 // Determine structure size based on macOS version
